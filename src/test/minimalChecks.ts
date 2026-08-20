@@ -34,6 +34,14 @@ function runChecks() {
   }
   console.log('✓ Check 1.3: Score clamping out-of-range values passed.');
 
+  // Check non-numeric / NaN input handling
+  // (NaN, 'abc', null, undefined) coerced to (0, 0, 0, 0) => 0
+  const scoreNonNumeric = calculateTotalScore(NaN as any, 'abc' as any, null as any, undefined as any);
+  if (scoreNonNumeric !== 0) {
+    throw new Error(`Test 1 Failed: Non-numeric handling failed, expected 0, got ${scoreNonNumeric}`);
+  }
+  console.log('✓ Check 1.4: Non-numeric / NaN score input coerced to 0 successfully.');
+
   // Check 2: Rejection of unknown offering IDs
   const validCatalogIds = new Set(['seed-01-visionai', 'seed-02-iot-scada', 'user-custom-01']);
   const rawModelRecommendations = [

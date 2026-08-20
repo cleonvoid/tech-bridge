@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { RotateCcw, AlertTriangle, X, CheckCircle, Loader2 } from 'lucide-react';
-import { auth, deleteUserOwnedOfferings } from '../lib/firebase';
+import { auth, deleteUserOwnedOfferings, ensureAnonymousAuth } from '../lib/firebase';
 
 interface ResetDemoModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onResetComplete: () => void;
+  onResetComplete: (deletedUserId?: string) => void;
   userOfferingCount: number;
 }
 
@@ -25,12 +25,19 @@ export const ResetDemoModal: React.FC<ResetDemoModalProps> = ({
     setStatusMessage(null);
 
     try {
-      const currentUserId = auth?.currentUser?.uid;
-      let deletedCount = 0;
+      const user = await ensureAnonymousAuth();
+      const currentUserId = user?.uid || auth?.currentUser?.uid;
 
-      if (currentUserId) {
-        deletedCount = await deleteUserOwnedOfferings(currentUserId);
+      if (!currentUserId) {
+        setStatusMessage({
+          type: 'error',
+          text: 'Không thể xác thực phiên làm việc để xóa dữ liệu trên Firestore. Vui lòng kiểm tra lại kết nối.',
+        });
+        setIsLoading(false);
+        return;
       }
+
+      const deletedCount = await deleteUserOwnedOfferings(currentUserId);
 
       setStatusMessage({
         type: 'success',
@@ -39,7 +46,7 @@ export const ResetDemoModal: React.FC<ResetDemoModalProps> = ({
 
       setTimeout(() => {
         setIsLoading(false);
-        onResetComplete();
+        onResetComplete(currentUserId);
         onClose();
         setStatusMessage(null);
       }, 1400);
@@ -47,10 +54,9 @@ export const ResetDemoModal: React.FC<ResetDemoModalProps> = ({
       console.error('Lỗi khi đặt lại demo:', err);
       setStatusMessage({
         type: 'error',
-        text: 'Không thể xóa dữ liệu người dùng trên Firestore. Trạng thái giao diện cục bộ đã được làm mới.',
+        text: 'Không thể xóa dữ liệu người dùng trên Firestore. Vui lòng kiểm tra lại quyền hoặc kết nối.',
       });
       setIsLoading(false);
-      onResetComplete();
     }
   };
 

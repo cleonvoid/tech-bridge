@@ -121,9 +121,9 @@ export async function ensureAnonymousAuth(): Promise<User | null> {
 }
 
 /**
- * Saves a user-created technology offering to Firestore
+ * Saves a user-created technology offering to Firestore and returns the sanitized saved offering
  */
-export async function saveOfferingToFirestore(offering: TechnologyOffering): Promise<void> {
+export async function saveOfferingToFirestore(offering: TechnologyOffering): Promise<TechnologyOffering> {
   if (!db || !auth) {
     throw new Error('Firebase chưa sẵn sàng. Vui lòng kiểm tra cấu hình Firebase.');
   }
@@ -143,15 +143,17 @@ export async function saveOfferingToFirestore(offering: TechnologyOffering): Pro
   try {
     const docRef = doc(db, 'offerings', offering.id);
     await setDoc(docRef, sanitizedOffering);
+    return sanitizedOffering;
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path, auth);
+    return sanitizedOffering;
   }
 }
 
 /**
- * Loads all user-created technology offerings from Firestore
+ * Loads all user-created technology offerings from Firestore (shared catalog)
  */
-export async function fetchUserOfferingsFromFirestore(): Promise<TechnologyOffering[]> {
+export async function fetchAllOfferingsFromFirestore(): Promise<TechnologyOffering[]> {
   if (!db || !auth) {
     return [];
   }
@@ -172,6 +174,33 @@ export async function fetchUserOfferingsFromFirestore(): Promise<TechnologyOffer
   } catch (error) {
     console.warn('Lỗi khi tải danh sách từ Firestore:', error);
     // Non-blocking for UI, return empty array
+    return [];
+  }
+}
+
+/**
+ * Loads only offerings created and owned by the specified user
+ */
+export async function fetchMyOfferingsFromFirestore(userId: string): Promise<TechnologyOffering[]> {
+  if (!db || !auth || !userId) {
+    return [];
+  }
+
+  await ensureAnonymousAuth();
+
+  const path = 'offerings';
+  try {
+    const colRef = collection(db, 'offerings');
+    const q = query(colRef, where('ownerId', '==', userId));
+    const snapshot = await getDocs(q);
+    const offerings: TechnologyOffering[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() as TechnologyOffering;
+      offerings.push(data);
+    });
+    return offerings;
+  } catch (error) {
+    console.warn('Lỗi khi tải danh sách giải pháp của tôi từ Firestore:', error);
     return [];
   }
 }

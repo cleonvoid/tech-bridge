@@ -1,19 +1,40 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
+import { calculateTotalScore } from './src/types';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: '2mb' }));
+
+// In-memory sliding window rate limiter: 10 requests / minute / IP
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX_REQUESTS = 10;
+const requestLogByIp = new Map<string, number[]>();
+
+function checkRateLimit(req: Request, res: Response): boolean {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const timestamps = requestLogByIp.get(ip) || [];
+  const windowStart = now - RATE_LIMIT_WINDOW_MS;
+  const recentTimestamps = timestamps.filter((t) => t > windowStart);
+
+  if (recentTimestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+    res.status(429).json({
+      error: 'Quá nhiều yêu cầu thẩm định hoặc chuẩn hóa trong thời gian ngắn. Vui lòng đợi 1 phút và thử lại.',
+    });
+    return false;
+  }
+
+  recentTimestamps.push(now);
+  requestLogByIp.set(ip, recentTimestamps);
+  return true;
+}
 
 // Lazy Gemini Client Initialization
 function getGeminiAI() {
@@ -31,24 +52,7 @@ function getGeminiAI() {
   });
 }
 
-const MODEL_NAME = 'gemini-2.5-flash';
-
-/**
- * Formula: round((relevance*40 + constraintFit*25 + feasibility*20 + evidence*15) / 5)
- */
-function calculateTotalScore(
-  relevance: number,
-  constraintFit: number,
-  feasibility: number,
-  evidence: number
-): number {
-  const rel = Math.max(0, Math.min(5, Math.round(Number(relevance) || 0)));
-  const con = Math.max(0, Math.min(5, Math.round(Number(constraintFit) || 0)));
-  const fea = Math.max(0, Math.min(5, Math.round(Number(feasibility) || 0)));
-  const evi = Math.max(0, Math.min(5, Math.round(Number(evidence) || 0)));
-
-  return Math.round((rel * 40 + con * 25 + fea * 20 + evi * 15) / 5);
-}
+const MODEL_NAME = 'gemini-3.7-flash';
 
 // Health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {
@@ -65,6 +69,10 @@ app.get('/api/health', (req: Request, res: Response) => {
  */
 app.post('/api/normalize-offering', async (req: Request, res: Response): Promise<void> => {
   try {
+    if (!checkRateLimit(req, res)) {
+      return;
+    }
+
     const { rawDescription } = req.body;
 
     if (!rawDescription || typeof rawDescription !== 'string') {
@@ -273,6 +281,10 @@ QUY TẮC CỐT LÕI VÀ BẢO TOÀN SỰ THẬT:
  */
 app.post('/api/recommend', async (req: Request, res: Response): Promise<void> => {
   try {
+    if (!checkRateLimit(req, res)) {
+      return;
+    }
+
     const { needText, catalog } = req.body;
 
     if (!needText || typeof needText !== 'string') {
@@ -294,6 +306,13 @@ app.post('/api/recommend', async (req: Request, res: Response): Promise<void> =>
     if (!Array.isArray(catalog) || catalog.length === 0) {
       res.status(400).json({ error: 'Danh mục giải pháp trống.' });
       return;
+    }
+
+    // NOTE: The catalog array is client-supplied and therefore untrusted.
+    // The validOfferingIds check below ensures internal consistency with the provided payload,
+    // but does not query against or verify live Firestore state on the server.
+    if (catalog.length > 50) {
+      console.warn(`[recommend API] Catalog truncated from ${catalog.length} items to 50 items maximum.`);
     }
 
     // Limit to 50 offerings max for performance and safety
@@ -503,10 +522,20 @@ Hãy phân tích nhu cầu và chọn tối đa 3 giải pháp phù hợp nhất
 
     const rawRecs = Array.isArray(parsed.recommendations) ? parsed.recommendations : [];
 
-    // Filter, validate, and compute deterministic totalScore
+    const seenOfferingIds = new Set<string>();
+
+    // Filter, deduplicate, compute deterministic totalScore, sort descending, then slice top 3
     const validatedRecs = rawRecs
-      .filter((rec: { offeringId?: string }) => rec && rec.offeringId && validOfferingIds.has(rec.offeringId))
-      .slice(0, 3)
+      .filter((rec: { offeringId?: string }) => {
+        if (!rec || !rec.offeringId || !validOfferingIds.has(rec.offeringId)) {
+          return false;
+        }
+        if (seenOfferingIds.has(rec.offeringId)) {
+          return false;
+        }
+        seenOfferingIds.add(rec.offeringId);
+        return true;
+      })
       .map((rec: {
         offeringId: string;
         relevanceScore: number;
@@ -538,7 +567,8 @@ Hãy phân tích nhu cầu và chọn tối đa 3 giải pháp phù hợp nhất
           suggestedQuestions: Array.isArray(rec.suggestedQuestions) ? rec.suggestedQuestions : [],
         };
       })
-      .sort((a: { totalScore: number }, b: { totalScore: number }) => b.totalScore - a.totalScore);
+      .sort((a: { totalScore: number }, b: { totalScore: number }) => b.totalScore - a.totalScore)
+      .slice(0, 3);
 
     res.json({
       normalizedNeed,

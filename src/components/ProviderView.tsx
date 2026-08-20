@@ -145,7 +145,7 @@ export const ProviderView: React.FC<ProviderViewProps> = ({
   // Save to Firestore action
   const handleSaveOffering = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData) return;
+    if (!formData || savedOffering) return;
 
     // Validation of required fields
     if (!formData.organizationName.trim()) {
@@ -191,14 +191,15 @@ export const ProviderView: React.FC<ProviderViewProps> = ({
     };
 
     try {
+      let finalOffering = newOffering;
       if (isFirebaseAvailable()) {
-        await saveOfferingToFirestore(newOffering);
+        finalOffering = await saveOfferingToFirestore(newOffering);
       } else {
         console.warn('Firebase chưa cấu hình, lưu vào trạng thái phiên làm việc cục bộ.');
       }
 
-      setSavedOffering(newOffering);
-      onOfferingSaved(newOffering);
+      setSavedOffering(finalOffering);
+      onOfferingSaved(finalOffering);
     } catch (err) {
       console.error('Lỗi khi lưu Firestore:', err);
       // If Firestore fails, still notify user clearly
@@ -680,13 +681,18 @@ export const ProviderView: React.FC<ProviderViewProps> = ({
             <button
               id="btn-save-offering-firestore"
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || Boolean(savedOffering)}
               className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-lg shadow-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isSaving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Đang lưu vào kho giải pháp...</span>
+                </>
+              ) : savedOffering ? (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Đã lưu vào kho giải pháp</span>
                 </>
               ) : (
                 <>

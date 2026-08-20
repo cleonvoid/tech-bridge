@@ -73,10 +73,10 @@ export function calculateTotalScore(
   feasibility: number,
   evidence: number
 ): number {
-  const rel = Math.max(0, Math.min(5, Math.round(relevance)));
-  const con = Math.max(0, Math.min(5, Math.round(constraintFit)));
-  const fea = Math.max(0, Math.min(5, Math.round(feasibility)));
-  const evi = Math.max(0, Math.min(5, Math.round(evidence)));
+  const rel = Math.max(0, Math.min(5, Math.round(Number(relevance) || 0)));
+  const con = Math.max(0, Math.min(5, Math.round(Number(constraintFit) || 0)));
+  const fea = Math.max(0, Math.min(5, Math.round(Number(feasibility) || 0)));
+  const evi = Math.max(0, Math.min(5, Math.round(Number(evidence) || 0)));
 
   return Math.round((rel * 40 + con * 25 + fea * 20 + evi * 15) / 5);
 }

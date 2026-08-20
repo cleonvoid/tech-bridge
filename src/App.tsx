@@ -9,19 +9,21 @@ import { SEED_OFFERINGS } from './data/seedOfferings';
 import { TechnologyOffering } from './types';
 import {
   isFirebaseAvailable,
-  fetchUserOfferingsFromFirestore,
+  fetchAllOfferingsFromFirestore,
+  fetchMyOfferingsFromFirestore,
   ensureAnonymousAuth,
 } from './lib/firebase';
 import { Cpu, Building2, Wrench, Sparkles, ArrowRight, CheckCircle2 } from 'lucide-react';
 
 export function App() {
   const [currentRole, setCurrentRole] = useState<UserRole>('business');
-  const [userOfferings, setUserOfferings] = useState<TechnologyOffering[]>([]);
+  const [catalogOfferings, setCatalogOfferings] = useState<TechnologyOffering[]>([]);
+  const [myOfferings, setMyOfferings] = useState<TechnologyOffering[]>([]);
   const [selectedOffering, setSelectedOffering] = useState<TechnologyOffering | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isFirebaseReady, setIsFirebaseReady] = useState(false);
 
-  // Initialize Firebase anonymous auth & fetch user-created offerings on mount
+  // Initialize Firebase anonymous auth & fetch offerings on mount
   useEffect(() => {
     let isMounted = true;
 
@@ -31,10 +33,16 @@ export function App() {
 
       if (available) {
         try {
-          await ensureAnonymousAuth();
-          const remoteOfferings = await fetchUserOfferingsFromFirestore();
+          const user = await ensureAnonymousAuth();
+          const remoteOfferings = await fetchAllOfferingsFromFirestore();
           if (isMounted) {
-            setUserOfferings(remoteOfferings);
+            setCatalogOfferings(remoteOfferings);
+          }
+          if (user && isMounted) {
+            const userOwned = await fetchMyOfferingsFromFirestore(user.uid);
+            if (isMounted) {
+              setMyOfferings(userOwned);
+            }
           }
         } catch (err) {
           console.warn('Lỗi khi tải dữ liệu từ Firestore lúc khởi tạo:', err);
@@ -49,13 +57,12 @@ export function App() {
     };
   }, []);
 
-  // Combined catalog: Immutable seed + dynamic user offerings
+  // Combined catalog: Curated seed offerings first (prevents starvation) + dynamic user offerings
   const fullCatalog = useMemo(() => {
-    // Avoid duplicates if any ID overlaps
-    const userIds = new Set(userOfferings.map((u) => u.id));
-    const uniqueSeeds = SEED_OFFERINGS.filter((s) => !userIds.has(s.id));
-    return [...userOfferings, ...uniqueSeeds];
-  }, [userOfferings]);
+    const seedIds = new Set(SEED_OFFERINGS.map((s) => s.id));
+    const uniqueCatalogOfferings = catalogOfferings.filter((u) => !seedIds.has(u.id));
+    return [...SEED_OFFERINGS, ...uniqueCatalogOfferings];
+  }, [catalogOfferings]);
 
   // Fast map lookup by ID
   const catalogMap = useMemo(() => {
@@ -67,11 +74,21 @@ export function App() {
   }, [fullCatalog]);
 
   const handleOfferingSaved = (newOffering: TechnologyOffering) => {
-    setUserOfferings((prev) => [newOffering, ...prev.filter((o) => o.id !== newOffering.id)]);
+    setCatalogOfferings((prev) => [newOffering, ...prev.filter((o) => o.id !== newOffering.id)]);
+    setMyOfferings((prev) => [newOffering, ...prev.filter((o) => o.id !== newOffering.id)]);
   };
 
-  const handleResetComplete = () => {
-    setUserOfferings([]);
+  const handleResetComplete = (deletedUserId?: string) => {
+    const targetUserId = deletedUserId;
+    const myIds = new Set(myOfferings.map((m) => m.id));
+    setMyOfferings([]);
+    setCatalogOfferings((prev) =>
+      prev.filter((o) => {
+        if (targetUserId && o.ownerId === targetUserId) return false;
+        if (myIds.has(o.id)) return false;
+        return true;
+      })
+    );
   };
 
   return (
@@ -81,7 +98,7 @@ export function App() {
         currentRole={currentRole}
         onSelectRole={setCurrentRole}
         totalOfferingsCount={fullCatalog.length}
-        userOfferingsCount={userOfferings.length}
+        userOfferingsCount={myOfferings.length}
         onOpenResetModal={() => setIsResetModalOpen(true)}
       />
 
@@ -178,7 +195,7 @@ export function App() {
         {/* Firebase / Connection Notice */}
         <FirebaseNotice
           isConfigured={isFirebaseReady}
-          userOfferingCount={userOfferings.length}
+          userOfferingCount={myOfferings.length}
         />
 
         {/* View Switcher based on Active Role */}
@@ -207,7 +224,7 @@ export function App() {
         isOpen={isResetModalOpen}
         onClose={() => setIsResetModalOpen(false)}
         onResetComplete={handleResetComplete}
-        userOfferingCount={userOfferings.length}
+        userOfferingCount={myOfferings.length}
       />
 
       {/* Footer */}

@@ -75,24 +75,33 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 45000);
+    let stepTimerId: NodeJS.Timeout | null = null;
 
     try {
       // Step update for user visibility
-      setTimeout(() => {
+      stepTimerId = setTimeout(() => {
         setLoadingStep('Đang đối chiếu danh mục giải pháp và thẩm định độ phù hợp...');
       }, 700);
+
+      // Strip contact PII before sending catalog to recommendation API
+      const sanitizedCatalog = catalog.map((item) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { contactName, contactEmail, ...safeItem } = item;
+        return safeItem;
+      });
 
       const response = await fetch('/api/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           needText: textToSearch,
-          catalog: catalog,
+          catalog: sanitizedCatalog,
         }),
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
+      if (stepTimerId) clearTimeout(stepTimerId);
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
@@ -104,6 +113,7 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
       setRecommendations(data.recommendations || []);
     } catch (err) {
       clearTimeout(timeoutId);
+      if (stepTimerId) clearTimeout(stepTimerId);
       console.error('Lỗi khi thẩm định:', err);
       if (err instanceof DOMException && err.name === 'AbortError') {
         setError('Quá trình thẩm định mất nhiều thời gian hơn dự kiến (quá thời gian chờ). Vui lòng thử lại.');
@@ -115,6 +125,8 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
         );
       }
     } finally {
+      clearTimeout(timeoutId);
+      if (stepTimerId) clearTimeout(stepTimerId);
       setIsLoading(false);
       setLoadingStep('');
     }
@@ -238,7 +250,7 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
         {/* Action Button */}
         <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3.5 border-t border-slate-100">
           <div className="text-xs text-slate-500">
-            * Thẩm định đối soát trên toàn bộ <strong>{catalog.length}</strong> giải pháp khả dụng trong kho dữ liệu.
+            * Thẩm định đối soát trên <strong>{Math.min(catalog.length, 50)}</strong> giải pháp khả dụng trong kho dữ liệu{catalog.length > 50 ? ' (giới hạn 50 giải pháp tối đa)' : ''}.
           </div>
 
           <button

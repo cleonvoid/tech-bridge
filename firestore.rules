@@ -29,10 +29,8 @@ service cloud.firestore {
         && data.createdAt is string;
     }
 
-    // Default deny for all unspecified collections
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    // Cloud Firestore denies all reads and writes by default.
+    // Each collection path below explicitly opts into specific, hardened access permissions.
 
     // Offerings collection
     match /offerings/{offeringId} {
