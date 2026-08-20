@@ -1,0 +1,6 @@
+{
+  "name": "Cầu Nối Công Nghệ",
+  "description": "Từ bài toán đến giải pháp phù hợp trong vài phút - Nền tảng kết nối doanh nghiệp Việt Nam với giải pháp công nghệ.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

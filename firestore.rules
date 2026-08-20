@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function isValidOffering(data) {
+      return data.id is string
+        && data.ownerId is string
+        && data.ownerId == request.auth.uid
+        && data.source == 'user'
+        && data.organizationName is string && data.organizationName.size() > 0 && data.organizationName.size() <= 250
+        && data.solutionName is string && data.solutionName.size() > 0 && data.solutionName.size() <= 250
+        && data.summary is string && data.summary.size() > 0 && data.summary.size() <= 4000
+        && data.deploymentModel in ['on-premise', 'cloud', 'hybrid', 'consulting']
+        && data.readinessLevel in ['prototype', 'pilot-ready', 'deployment-ready', 'commercial']
+        && data.contactName is string && data.contactName.size() > 0 && data.contactName.size() <= 150
+        && data.contactEmail is string && data.contactEmail.size() > 0 && data.contactEmail.size() <= 150
+        && data.createdAt is string;
+    }
+
+    // Default deny for all unspecified collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Offerings collection
+    match /offerings/{offeringId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && isValidId(offeringId)
+        && request.resource.data.id == offeringId
+        && isValidOffering(request.resource.data);
+
+      allow update: if isSignedIn()
+        && isValidId(offeringId)
+        && resource.data.ownerId == request.auth.uid
+        && resource.data.source == 'user'
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.source == 'user'
+        && isValidOffering(request.resource.data);
+
+      allow delete: if isSignedIn()
+        && isValidId(offeringId)
+        && resource.data.ownerId == request.auth.uid
+        && resource.data.source == 'user';
+    }
+  }
+}

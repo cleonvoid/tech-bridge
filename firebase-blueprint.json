@@ -1,0 +1,122 @@
+{
+  "entities": {
+    "TechnologyOffering": {
+      "title": "TechnologyOffering",
+      "description": "A technology offering submitted by a solution provider or loaded from seed data.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the offering."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the creator."
+        },
+        "source": {
+          "type": "string",
+          "enum": ["seed", "user"],
+          "description": "Source of the offering."
+        },
+        "organizationName": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Name of the organization."
+        },
+        "solutionName": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Name of the technology solution."
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Executive summary of the solution."
+        },
+        "categories": {
+          "type": "array",
+          "description": "Technology categories."
+        },
+        "industries": {
+          "type": "array",
+          "description": "Target industries."
+        },
+        "problemsSolved": {
+          "type": "array",
+          "description": "List of core problems solved."
+        },
+        "capabilities": {
+          "type": "array",
+          "description": "Key technical capabilities."
+        },
+        "deploymentModel": {
+          "type": "string",
+          "enum": ["on-premise", "cloud", "hybrid", "consulting"],
+          "description": "Deployment architecture model."
+        },
+        "budgetMinMillionVND": {
+          "type": "number",
+          "description": "Minimum budget in million VND."
+        },
+        "budgetMaxMillionVND": {
+          "type": "number",
+          "description": "Maximum budget in million VND."
+        },
+        "implementationWeeksMin": {
+          "type": "number",
+          "description": "Minimum implementation time in weeks."
+        },
+        "implementationWeeksMax": {
+          "type": "number",
+          "description": "Maximum implementation time in weeks."
+        },
+        "locations": {
+          "type": "array",
+          "description": "Supported operational locations."
+        },
+        "readinessLevel": {
+          "type": "string",
+          "enum": ["prototype", "pilot-ready", "deployment-ready", "commercial"],
+          "description": "Technology readiness level."
+        },
+        "evidence": {
+          "type": "array",
+          "description": "Evidence and case studies."
+        },
+        "contactName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Contact person name."
+        },
+        "contactEmail": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Contact email address."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation."
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "source",
+        "organizationName",
+        "solutionName",
+        "summary",
+        "deploymentModel",
+        "readinessLevel",
+        "contactName",
+        "contactEmail",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/offerings/{offeringId}": {
+      "schema": "TechnologyOffering",
+      "description": "Stores user-submitted technology offerings."
+    }
+  }
+}
